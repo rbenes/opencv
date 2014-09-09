@@ -9,6 +9,7 @@
 
 # our local copy
 # xxxxx
+# yyy
 
 
 include(cmake/OpenCVMinDepVersions.cmake)
