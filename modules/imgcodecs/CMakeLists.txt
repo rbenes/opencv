@@ -1,5 +1,5 @@
 set(the_description "Image codecs")
-ocv_add_module(imgcodecs opencv_imgproc)
+ocv_add_module(imgcodecs opencv_imgproc WRAP java python)
 
 # ----------------------------------------------------------------------------
 #  CMake file for imgcodecs. See root CMakeLists.txt
@@ -9,7 +9,7 @@ ocv_add_module(imgcodecs opencv_imgproc)
 
 ocv_clear_vars(GRFMT_LIBS)
 
-if(HAVE_WINRT_CX)
+if(HAVE_WINRT_CX AND NOT WINRT)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /ZW")
 endif()
 
@@ -106,21 +106,7 @@ ocv_create_module(${GRFMT_LIBS} ${IMGCODECS_LIBRARIES})
 
 macro(ocv_imgcodecs_configure_target)
 if(APPLE)
-  ocv_check_flag_support(OBJCXX "-fobjc-exceptions" HAVE_OBJC_EXCEPTIONS)
-  if(HAVE_OBJC_EXCEPTIONS)
-    foreach(source ${OPENCV_MODULE_${the_module}_SOURCES})
-      if("${source}" MATCHES "\\.mm$")
-        get_source_file_property(flags "${source}" COMPILE_FLAGS)
-        if(flags)
-          set(flags "${_flags} -fobjc-exceptions")
-        else()
-          set(flags "-fobjc-exceptions")
-        endif()
-
-        set_source_files_properties("${source}" PROPERTIES COMPILE_FLAGS "${flags}")
-      endif()
-    endforeach()
-  endif()
+  add_apple_compiler_options(the_module)
 endif()
 
 if(BUILD_SHARED_LIBS)

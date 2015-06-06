@@ -242,6 +242,24 @@ macro(ocv_warnings_disable)
   endif(NOT ENABLE_NOISY_WARNINGS)
 endmacro()
 
+macro(add_apple_compiler_options the_module)
+  ocv_check_flag_support(OBJCXX "-fobjc-exceptions" HAVE_OBJC_EXCEPTIONS)
+  if(HAVE_OBJC_EXCEPTIONS)
+    foreach(source ${OPENCV_MODULE_${the_module}_SOURCES})
+      if("${source}" MATCHES "\\.mm$")
+        get_source_file_property(flags "${source}" COMPILE_FLAGS)
+        if(flags)
+          set(flags "${_flags} -fobjc-exceptions")
+        else()
+          set(flags "-fobjc-exceptions")
+        endif()
+
+        set_source_files_properties("${source}" PROPERTIES COMPILE_FLAGS "${flags}")
+      endif()
+    endforeach()
+  endif()
+endmacro()
+
 # Provides an option that the user can optionally select.
 # Can accept condition to control when option is available for user.
 # Usage:
@@ -258,12 +276,12 @@ macro(OCV_OPTION variable description value)
     endif()
   endforeach()
   unset(__varname)
-  if("${__condition}" STREQUAL "")
+  if(__condition STREQUAL "")
     set(__condition 2 GREATER 1)
   endif()
 
   if(${__condition})
-    if("${__value}" MATCHES ";")
+    if(__value MATCHES ";")
       if(${__value})
         option(${variable} "${description}" ON)
       else()
@@ -395,31 +413,6 @@ function(status text)
     ocv_output_status("${text}")
   endif()
 endfunction()
-
-
-# splits cmake libraries list of format "general;item1;debug;item2;release;item3" to two lists
-macro(ocv_split_libs_list lst lstdbg lstopt)
-  set(${lstdbg} "")
-  set(${lstopt} "")
-  set(perv_keyword "")
-  foreach(word ${${lst}})
-    if(word STREQUAL "debug" OR word STREQUAL "optimized")
-      set(perv_keyword ${word})
-    elseif(word STREQUAL "general")
-      set(perv_keyword "")
-    elseif(perv_keyword STREQUAL "debug")
-      list(APPEND ${lstdbg} "${word}")
-      set(perv_keyword "")
-    elseif(perv_keyword STREQUAL "optimized")
-      list(APPEND ${lstopt} "${word}")
-      set(perv_keyword "")
-    else()
-      list(APPEND ${lstdbg} "${word}")
-      list(APPEND ${lstopt} "${word}")
-      set(perv_keyword "")
-    endif()
-  endforeach()
-endmacro()
 
 
 # remove all matching elements from the list
@@ -738,6 +731,9 @@ endfunction()
 function(_ocv_append_target_includes target)
   if(DEFINED OCV_TARGET_INCLUDE_DIRS_${target})
     target_include_directories(${target} PRIVATE ${OCV_TARGET_INCLUDE_DIRS_${target}})
+    if (TARGET ${target}_object)
+      target_include_directories(${target}_object PRIVATE ${OCV_TARGET_INCLUDE_DIRS_${target}})
+    endif()
     unset(OCV_TARGET_INCLUDE_DIRS_${target} CACHE)
   endif()
 endfunction()
@@ -762,8 +758,77 @@ function(ocv_add_library target)
       ocv_include_directories(${CUDA_INCLUDE_DIRS})
       ocv_cuda_compile(cuda_objs ${lib_cuda_srcs} ${lib_cuda_hdrs})
     endif()
+    set(OPENCV_MODULE_${target}_CUDA_OBJECTS ${cuda_objs} CACHE INTERNAL "Compiled CUDA object files")
   endif()
 
   add_library(${target} ${ARGN} ${cuda_objs})
+
+  # Add OBJECT library (added in cmake 2.8.8) to use in compound modules
+  if (NOT CMAKE_VERSION VERSION_LESS "2.8.8"
+      AND NOT OPENCV_MODULE_${target}_CHILDREN
+      AND NOT OPENCV_MODULE_${target}_CLASS STREQUAL "BINDINGS"
+      AND NOT ${target} STREQUAL "opencv_ts"
+    )
+    set(sources ${ARGN})
+    ocv_list_filterout(sources "\\\\.(cl|inc)$")
+    add_library(${target}_object OBJECT ${sources})
+    set_target_properties(${target}_object PROPERTIES
+      EXCLUDE_FROM_ALL True
+      EXCLUDE_FROM_DEFAULT_BUILD True
+      POSITION_INDEPENDENT_CODE True
+      )
+    if (ENABLE_SOLUTION_FOLDERS)
+      set_target_properties(${target}_object PROPERTIES FOLDER "object_libraries")
+    endif()
+    unset(sources)
+  endif()
+
   _ocv_append_target_includes(${target})
 endfunction()
+
+# build the list of opencv libs and dependencies for all modules
+#  _modules - variable to hold list of all modules
+#  _extra - variable to hold list of extra dependencies
+#  _3rdparty - variable to hold list of prebuilt 3rdparty libraries
+macro(ocv_get_all_libs _modules _extra _3rdparty)
+  set(${_modules} "")
+  set(${_extra} "")
+  set(${_3rdparty} "")
+  foreach(m ${OPENCV_MODULES_PUBLIC})
+    get_target_property(deps ${m} INTERFACE_LINK_LIBRARIES)
+    if(NOT deps)
+      set(deps "")
+    endif()
+    list(INSERT ${_modules} 0 ${deps} ${m})
+    foreach (dep ${deps} ${OPENCV_LINKER_LIBS})
+      if (NOT DEFINED OPENCV_MODULE_${dep}_LOCATION)
+        if (TARGET ${dep})
+          get_target_property(_output ${dep} ARCHIVE_OUTPUT_DIRECTORY)
+          if ("${_output}" STREQUAL "${3P_LIBRARY_OUTPUT_PATH}")
+            list(INSERT ${_3rdparty} 0 ${dep})
+          else()
+            list(INSERT ${_extra} 0 ${dep})
+          endif()
+        else()
+          list(INSERT ${_extra} 0 ${dep})
+        endif()
+      endif()
+    endforeach()
+  endforeach()
+
+  # ippicv specific handling
+  list(FIND ${_extra} "ippicv" ippicv_idx)
+  if (${ippicv_idx} GREATER -1)
+    list(REMOVE_ITEM ${_extra} "ippicv")
+    list(INSERT ${_3rdparty} 0 "ippicv")
+  endif()
+
+  # split 3rdparty libs and modules
+  list(REMOVE_ITEM ${_modules} ${${_3rdparty}} ${${_extra}})
+
+  # convert CMake lists to makefile literals
+  foreach(lst ${_modules} ${_3rdparty} ${_extra})
+    ocv_list_unique(${lst})
+    ocv_list_reverse(${lst})
+  endforeach()
+endmacro()

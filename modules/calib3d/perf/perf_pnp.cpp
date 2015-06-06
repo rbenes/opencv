@@ -10,7 +10,7 @@ using namespace perf;
 using std::tr1::make_tuple;
 using std::tr1::get;
 
-CV_ENUM(pnpAlgo, SOLVEPNP_ITERATIVE, SOLVEPNP_EPNP, SOLVEPNP_P3P, SOLVEPNP_DLS)
+CV_ENUM(pnpAlgo, SOLVEPNP_ITERATIVE, SOLVEPNP_EPNP, SOLVEPNP_P3P, SOLVEPNP_DLS, SOLVEPNP_UPNP)
 
 typedef std::tr1::tuple<int, pnpAlgo> PointsNum_Algo_t;
 typedef perf::TestBaseWithParam<PointsNum_Algo_t> PointsNum_Algo;
@@ -19,8 +19,8 @@ typedef perf::TestBaseWithParam<int> PointsNum;
 
 PERF_TEST_P(PointsNum_Algo, solvePnP,
             testing::Combine(
-                testing::Values(4, 3*9, 7*13), //TODO: find why results on 4 points are too unstable
-                testing::Values((int)SOLVEPNP_ITERATIVE, (int)SOLVEPNP_EPNP)
+                testing::Values(5, 3*9, 7*13), //TODO: find why results on 4 points are too unstable
+                testing::Values((int)SOLVEPNP_ITERATIVE, (int)SOLVEPNP_EPNP, (int)SOLVEPNP_UPNP, (int)SOLVEPNP_DLS)
                 )
             )
 {
@@ -64,13 +64,15 @@ PERF_TEST_P(PointsNum_Algo, solvePnP,
 
 PERF_TEST_P(PointsNum_Algo, solvePnPSmallPoints,
             testing::Combine(
-                testing::Values(4), //TODO: find why results on 4 points are too unstable
-                testing::Values((int)SOLVEPNP_P3P, (int)SOLVEPNP_DLS)
+                testing::Values(5),
+                testing::Values((int)SOLVEPNP_P3P, (int)SOLVEPNP_EPNP, (int)SOLVEPNP_DLS, (int)SOLVEPNP_UPNP)
                 )
             )
 {
     int pointsNum = get<0>(GetParam());
     pnpAlgo algo = get<1>(GetParam());
+    if( algo == SOLVEPNP_P3P )
+        pointsNum = 4;
 
     vector<Point2f> points2d(pointsNum);
     vector<Point3f> points3d(pointsNum);
@@ -79,8 +81,8 @@ PERF_TEST_P(PointsNum_Algo, solvePnPSmallPoints,
 
     Mat distortion = Mat::zeros(5, 1, CV_32FC1);
     Mat intrinsics = Mat::eye(3, 3, CV_32FC1);
-    intrinsics.at<float> (0, 0) = 400.0;
-    intrinsics.at<float> (1, 1) = 400.0;
+    intrinsics.at<float> (0, 0) = 400.0f;
+    intrinsics.at<float> (1, 1) = 400.0f;
     intrinsics.at<float> (0, 2) = 640 / 2;
     intrinsics.at<float> (1, 2) = 480 / 2;
 
@@ -92,7 +94,7 @@ PERF_TEST_P(PointsNum_Algo, solvePnPSmallPoints,
 
     //add noise
     Mat noise(1, (int)points2d.size(), CV_32FC2);
-    randu(noise, 0, 0.01);
+    randu(noise, -0.001, 0.001);
     add(points2d, noise, points2d);
 
     declare.in(points3d, points2d);
@@ -103,11 +105,11 @@ PERF_TEST_P(PointsNum_Algo, solvePnPSmallPoints,
         solvePnP(points3d, points2d, intrinsics, distortion, rvec, tvec, false, algo);
     }
 
-    SANITY_CHECK(rvec, 1e-4);
+    SANITY_CHECK(rvec, 1e-1);
     SANITY_CHECK(tvec, 1e-2);
 }
 
-PERF_TEST_P(PointsNum, DISABLED_SolvePnPRansac, testing::Values(4, 3*9, 7*13))
+PERF_TEST_P(PointsNum, DISABLED_SolvePnPRansac, testing::Values(5, 3*9, 7*13))
 {
     int count = GetParam();
 

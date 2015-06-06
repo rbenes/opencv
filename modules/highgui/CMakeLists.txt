@@ -1,5 +1,9 @@
+if (WINRT)
+  ocv_module_disable(highgui)
+endif()
+
 set(the_description "High-level GUI and Media I/O")
-ocv_add_module(highgui opencv_imgproc opencv_imgcodecs opencv_videoio OPTIONAL opencv_androidcamera)
+ocv_add_module(highgui opencv_imgproc opencv_imgcodecs opencv_videoio WRAP python)
 
 # ----------------------------------------------------------------------------
 #  CMake file for highgui. See root CMakeLists.txt
@@ -7,7 +11,8 @@ ocv_add_module(highgui opencv_imgproc opencv_imgcodecs opencv_videoio OPTIONAL o
 #   Jose Luis Blanco, 2008
 # ----------------------------------------------------------------------------
 
-if(HAVE_WINRT_CX)
+# Compilation with /ZW is not allowed for *.c files
+if(HAVE_WINRT_CX AND NOT WINRT)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /ZW")
 endif()
 
@@ -98,21 +103,7 @@ ocv_create_module(${HIGHGUI_LIBRARIES})
 
 macro(ocv_highgui_configure_target)
 if(APPLE)
-  ocv_check_flag_support(OBJCXX "-fobjc-exceptions" HAVE_OBJC_EXCEPTIONS)
-  if(HAVE_OBJC_EXCEPTIONS)
-    foreach(source ${OPENCV_MODULE_${the_module}_SOURCES})
-      if("${source}" MATCHES "\\.mm$")
-        get_source_file_property(flags "${source}" COMPILE_FLAGS)
-        if(flags)
-          set(flags "${_flags} -fobjc-exceptions")
-        else()
-          set(flags "-fobjc-exceptions")
-        endif()
-
-        set_source_files_properties("${source}" PROPERTIES COMPILE_FLAGS "${flags}")
-      endif()
-    endforeach()
-  endif()
+  add_apple_compiler_options(the_module)
 endif()
 
 if(BUILD_SHARED_LIBS)

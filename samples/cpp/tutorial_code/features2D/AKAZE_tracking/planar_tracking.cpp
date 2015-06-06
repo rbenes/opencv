@@ -41,7 +41,7 @@ protected:
 void Tracker::setFirstFrame(const Mat frame, vector<Point2f> bb, string title, Stats& stats)
 {
     first_frame = frame.clone();
-    (*detector)(first_frame, noArray(), first_kp, first_desc);
+    detector->detectAndCompute(first_frame, noArray(), first_kp, first_desc);
     stats.keypoints = (int)first_kp.size();
     drawBoundingBox(first_frame, bb);
     putText(first_frame, title, Point(0, 60), FONT_HERSHEY_PLAIN, 5, Scalar::all(0), 4);
@@ -52,7 +52,7 @@ Mat Tracker::process(const Mat frame, Stats& stats)
 {
     vector<KeyPoint> kp;
     Mat desc;
-    (*detector)(frame, noArray(), kp, desc);
+    detector->detectAndCompute(frame, noArray(), kp, desc);
     stats.keypoints = (int)kp.size();
 
     vector< vector<DMatch> > matches;
@@ -135,18 +135,19 @@ int main(int argc, char **argv)
         return 1;
     }
     fs["bounding_box"] >> bb;
-    Ptr<Feature2D> akaze = Feature2D::create("AKAZE");
-    akaze->set("threshold", akaze_thresh);
-    Ptr<Feature2D> orb = Feature2D::create("ORB");
+
+    Stats stats, akaze_stats, orb_stats;
+    Ptr<AKAZE> akaze = AKAZE::create();
+    akaze->setThreshold(akaze_thresh);
+    Ptr<ORB> orb = ORB::create();
+    orb->setMaxFeatures(stats.keypoints);
     Ptr<DescriptorMatcher> matcher = DescriptorMatcher::create("BruteForce-Hamming");
     Tracker akaze_tracker(akaze, matcher);
     Tracker orb_tracker(orb, matcher);
 
-    Stats stats, akaze_stats, orb_stats;
     Mat frame;
     video_in >> frame;
     akaze_tracker.setFirstFrame(frame, bb, "AKAZE", stats);
-    orb_tracker.getDetector()->set("nFeatures", stats.keypoints);
     orb_tracker.setFirstFrame(frame, bb, "ORB", stats);
 
     Stats akaze_draw_stats, orb_draw_stats;
@@ -162,7 +163,7 @@ int main(int argc, char **argv)
             akaze_draw_stats = stats;
         }
 
-        orb_tracker.getDetector()->set("nFeatures", stats.keypoints);
+        orb->setMaxFeatures(stats.keypoints);
         orb_res = orb_tracker.process(frame, stats);
         orb_stats += stats;
         if(update_stats) {

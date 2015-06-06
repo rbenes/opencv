@@ -102,7 +102,7 @@ I modified the following:
     autosetup_capture_mode_v4l2 -> autodetect capture modes for v4l2
   - Modifications are according with Video4Linux old codes
   - Video4Linux handling is automatically if it does not recognize a Video4Linux2 device
-  - Tested succesful with Logitech Quickcam Express (V4L), Creative Vista (V4L) and Genius VideoCam Notebook (V4L2)
+  - Tested successfully with Logitech Quickcam Express (V4L), Creative Vista (V4L) and Genius VideoCam Notebook (V4L2)
   - Correct source lines with compiler warning messages
   - Information message from v4l/v4l2 detection
 
@@ -113,7 +113,7 @@ I modified the following:
   - SN9C10x chip based webcams support
   - New methods are internal:
     bayer2rgb24, sonix_decompress -> decoder routines for SN9C10x decoding from Takafumi Mizuno <taka-qce@ls-a.jp> with his pleasure :)
-  - Tested succesful with Genius VideoCam Notebook (V4L2)
+  - Tested successfully with Genius VideoCam Notebook (V4L2)
 
 Sixth Patch: Sept 10, 2005 Csaba Kertesz sign@freemail.hu
 For Release:  OpenCV-Linux Beta5 OpenCV-0.9.7
@@ -123,7 +123,7 @@ I added the following:
   - Get and change V4L capture controls (hue, saturation, brightness, contrast)
   - New method is internal:
     icvSetControl -> set capture controls
-  - Tested succesful with Creative Vista (V4L)
+  - Tested successfully with Creative Vista (V4L)
 
 Seventh Patch: Sept 10, 2005 Csaba Kertesz sign@freemail.hu
 For Release:  OpenCV-Linux Beta5 OpenCV-0.9.7
@@ -132,7 +132,7 @@ I added the following:
   - Detect, get and change V4L2 capture controls (hue, saturation, brightness, contrast, gain)
   - New methods are internal:
     v4l2_scan_controls_enumerate_menu, v4l2_scan_controls -> detect capture control intervals
-  - Tested succesful with Genius VideoCam Notebook (V4L2)
+  - Tested successfully with Genius VideoCam Notebook (V4L2)
 
 8th patch: Jan 5, 2006, Olivier.Bornet@idiap.ch
 Add support of V4L2_PIX_FMT_YUYV and V4L2_PIX_FMT_MJPEG.
@@ -294,7 +294,8 @@ enum PALETTE_TYPE {
   PALETTE_SBGGR8,
   PALETTE_SN9C10X,
   PALETTE_MJPEG,
-  PALETTE_SGBRG
+  PALETTE_SGBRG,
+  PALETTE_RGB24
 };
 
 typedef struct CvCaptureCAM_V4L
@@ -587,6 +588,10 @@ static int autosetup_capture_mode_v4l2(CvCaptureCAM_V4L* capture)
   if (try_palette_v4l2(capture, V4L2_PIX_FMT_SGBRG) == 0)
   {
     capture->palette = PALETTE_SGBRG;
+  }
+  else if (try_palette_v4l2(capture, V4L2_PIX_FMT_RGB24) == 0)
+  {
+    capture->palette = PALETTE_RGB24;
   }
       else
   {
@@ -1916,6 +1921,18 @@ static void sgbrg2rgb24(long int WIDTH, long int HEIGHT, unsigned char *src, uns
     }
 }
 
+static void
+rgb24_to_rgb24 (int width, int height, unsigned char *src, unsigned char *dst)
+{
+  const int size = width * height;
+  for(int i = 0; i < size; ++i, src += 3, dst += 3)
+  {
+    *(dst + 0) = *(src + 2);
+    *(dst + 1) = *(src + 1);
+    *(dst + 2) = *(src + 0);
+  }
+}
+
 #define CLAMP(x)        ((x)<0?0:((x)>255)?255:(x))
 
 typedef struct {
@@ -2215,6 +2232,12 @@ static IplImage* icvRetrieveFrameCAM_V4L( CvCaptureCAM_V4L* capture, int) {
 
     case PALETTE_SGBRG:
         sgbrg2rgb24(capture->form.fmt.pix.width,
+                capture->form.fmt.pix.height,
+                (unsigned char*)capture->buffers[(capture->bufferIndex+1) % capture->req.count].start,
+                (unsigned char*)capture->frame.imageData);
+        break;
+    case PALETTE_RGB24:
+        rgb24_to_rgb24(capture->form.fmt.pix.width,
                 capture->form.fmt.pix.height,
                 (unsigned char*)capture->buffers[(capture->bufferIndex+1) % capture->req.count].start,
                 (unsigned char*)capture->frame.imageData);
@@ -2856,7 +2879,7 @@ public:
     virtual bool open( int index );
     virtual void close();
 
-    virtual double getProperty(int);
+    virtual double getProperty(int) const;
     virtual bool setProperty(int, double);
     virtual bool grabFrame();
     virtual IplImage* retrieveFrame(int);
@@ -2891,7 +2914,7 @@ IplImage* CvCaptureCAM_V4L_CPP::retrieveFrame(int)
     return captureV4L ? icvRetrieveFrameCAM_V4L( captureV4L, 0 ) : 0;
 }
 
-double CvCaptureCAM_V4L_CPP::getProperty( int propId )
+double CvCaptureCAM_V4L_CPP::getProperty( int propId ) const
 {
     return captureV4L ? icvGetPropertyCAM_V4L( captureV4L, propId ) : 0.0;
 }

@@ -1548,7 +1548,7 @@ static bool ocl_morphOp(InputArray _src, OutputArray _dst, InputArray _kernel,
         return true;
     }
 
-#if defined ANDROID
+#ifdef ANDROID
     size_t localThreads[2] = { 16, 8 };
 #else
     size_t localThreads[2] = { 16, 16 };
@@ -1562,6 +1562,11 @@ static bool ocl_morphOp(InputArray _src, OutputArray _dst, InputArray _kernel,
 
     if (localThreads[0]*localThreads[1] * 2 < (localThreads[0] + ksize.width - 1) * (localThreads[1] + ksize.height - 1))
         return false;
+
+#ifdef ANDROID
+    if (dev.isNVidia())
+        return false;
+#endif
 
     // build processing
     String processing;
@@ -1707,8 +1712,14 @@ static void morphOp( int op, InputArray _src, OutputArray _dst,
     }
 
 #if IPP_VERSION_X100 >= 801
-    if( IPPMorphOp(op, _src, _dst, kernel, anchor, iterations, borderType, borderValue) )
-        return;
+    CV_IPP_CHECK()
+    {
+        if( IPPMorphOp(op, _src, _dst, kernel, anchor, iterations, borderType, borderValue) )
+        {
+            CV_IMPL_ADD(CV_IMPL_IPP);
+            return;
+        }
+    }
 #endif
 
     Mat src = _src.getMat();
@@ -1809,9 +1820,14 @@ static bool ocl_morphologyEx(InputArray _src, OutputArray _dst, int op,
 #endif
 
 void cv::morphologyEx( InputArray _src, OutputArray _dst, int op,
-                       InputArray kernel, Point anchor, int iterations,
+                       InputArray _kernel, Point anchor, int iterations,
                        int borderType, const Scalar& borderValue )
 {
+    Mat kernel = _kernel.getMat();
+    if (kernel.empty())
+    {
+        kernel = getStructuringElement(MORPH_RECT, Size(3,3), Point(1,1));
+    }
 #ifdef HAVE_OPENCL
     Size ksize = kernel.size();
     anchor = normalizeAnchor(anchor, ksize);
